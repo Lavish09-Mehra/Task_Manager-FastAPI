@@ -158,3 +158,23 @@ curl http://127.0.0.1:8000/api/v1/tasks \
   signed with `SECRET_KEY`.
 - ⚠️ `SECRET_KEY` and `DATABASE_URL` live in `.env`, which is git-ignored.
   Never commit real credentials.
+
+---
+
+## 👨‍💻 Creator
+
+| | |
+| --- | --- |
+| **Name** | **Lavish Mehra** |
+| **GitHub** | [https://github.com/Lavish09-Mehra](https://github.com/Lavish09-Mehra) |
+
+![Lavish's GitHub stats](https://github-readme-stats.vercel.app/api?username=Lavish09-Mehra&show_icons=true&theme=radical)
+
+---
+
+⭐ **If you like this project, give it a star!** ⭐
+
+It helps more people discover the project and motivates future improvements.
+Just click the star button at the top right of the repository:
+
+👉 **[Star this repo](https://github.com/Lavish09-Mehra/Task_Manager-FastAPI)**

@@ -1,0 +1,17 @@
+# Project dependencies - install with:  pip install -r requirements.txt
+fastapi==0.136.3
+uvicorn[standard]==0.48.0
+
+# ORM & database driver
+SQLAlchemy==2.0.50
+psycopg2-binary==2.9.12
+
+# Config & validation
+python-dotenv==1.2.2
+pydantic-settings==2.15.0
+email-validator==2.3.0
+python-multipart
+
+# Auth
+bcrypt==5.0.0
+PyJWT==2.13.0

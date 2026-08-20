@@ -1,6 +1,14 @@
 # app/routers/categories.py
 # =====================================================================
-# Category endpoints - every route is scoped to the authenticated user.
+# CATEGORY ROUTES.
+#
+# Same ownership-scoping pattern as tasks.py: EVERY query includes
+# `Category.owner_id == user.id` in the WHERE clause, so one user can
+# never see, edit or delete another user's categories.
+#
+# A category is simply a user-owned label ("Work", "Personal", ...).
+# Deleting a category does NOT delete the tasks that used it - thanks to
+# ondelete="SET NULL" the tasks keep existing with category_id = NULL.
 # =====================================================================
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,10 +24,11 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 
 
 def _get_owned_category(db: Session, category_id: int, user: User) -> Category:
-    """Fetch a category that belongs to `user`, else raise 404.
+    """Fetch a category that belongs to `user`, or raise 404.
 
-    Owning is checked in the SQL query itself (id AND owner_id) so users
-    can never touch someone else's data, even by guessing an id.
+    The ownership check happens INSIDE the SQL:
+        WHERE categories.id = ? AND categories.owner_id = ?
+    so guessing someone else's id just returns 'not found'.
     """
     category = db.scalar(
         select(Category).where(Category.id == category_id, Category.owner_id == user.id)
@@ -35,6 +44,8 @@ def list_categories(
     user: User = Depends(get_current_user),
 ):
     """List all categories belonging to the current user."""
+    # db.scalars(...).all() -> every matching row as Category objects.
+    # Ordered alphabetically by name for a stable, friendly UI order.
     return db.scalars(
         select(Category).where(Category.owner_id == user.id).order_by(Category.name)
     ).all()
@@ -46,8 +57,11 @@ def create_category(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Create a new category (unique per user, tracked by DB index)."""
+    """Create a new category (name must be unique per user)."""
 
+    # Pre-flight duplicate check for a friendlier error. (The composite
+    # UNIQUE index in models.py would also reject duplicates at the DB
+    # level - trust, but verify, and give users a nice message first.)
     already = db.scalar(
         select(Category).where(
             Category.owner_id == user.id, Category.name == payload.name
@@ -59,7 +73,10 @@ def create_category(
             detail=f"Category '{payload.name}' already exists",
         )
 
+    # Note: `name` here is already STRIPPED by the Pydantic field_validator
+    # (schemas.py), so "Work" and "  Work" both map to "Work".
     category = Category(name=payload.name, color=payload.color, owner_id=user.id)
+
     db.add(category)
     db.commit()
     db.refresh(category)
@@ -72,7 +89,7 @@ def get_category(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Get one category by id."""
+    """Get one category by id (only if it's the caller's)."""
     return _get_owned_category(db, category_id, user)
 
 
@@ -83,15 +100,19 @@ def update_category(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Update a category (name / color)."""
+    """Update a category's name and/or color.
+
+    Same partial-update mechanic as tasks: exclude_unset=True -> only the
+    fields the client actually sent are assigned; everything else stays
+    untouched.
+    """
 
     category = _get_owned_category(db, category_id, user)
 
-    # only apply fields that were actually sent (allows partial update)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(category, field, value)
 
-    db.commit()
+    db.commit()       # category is tracked -> UPDATE on commit
     db.refresh(category)
     return category
 
@@ -102,11 +123,13 @@ def delete_category(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Delete a category. Its tasks keep existing (category -> NULL)."""
+    """Delete a category. Its tasks are KEPT (category becomes NULL)."""
 
     category = _get_owned_category(db, category_id, user)
 
-    # FK ondelete="SET NULL" handles the tasks automatically at DB level.
+    # ondelete="SET NULL" (models.py) makes PostgreSQL itself set
+    # tasks.category_id = NULL on all referring tasks, atomically within
+    # the DELETE. No manual bookkeeping needed.
     db.delete(category)
     db.commit()
-    # 204 must not return a body.
+    # 204 responses must not return a body.
